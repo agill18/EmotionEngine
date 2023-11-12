@@ -1,8 +1,11 @@
+
+from copy import copy
 import io
 import os
 import sys
 import time
 
+import streamlit as st
 import cv2 
 import keras
 import numpy as np
@@ -145,51 +148,75 @@ reduce_lr = keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.2,
 
 model.load_weights('model1.h5')
 
-url = "https://us.123rf.com/450wm/dglimages/dglimages1602/dglimages160200052/51896889-attractive-young-man-sitting-outside-he-is-smiling-at-the-camera.jpg"
-
-req = urllib.request.Request(
-    url, 
-    data=None, 
-    headers={
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/35.0.1916.47 Safari/537.36'
-    }
-)
-
-url_response = urllib.request.urlopen(req)
-
-img = cv2.imdecode(np.array(bytearray(url_response.read()), dtype=np.uint8), -1)
-
-gray_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
 face_classifier = cv2.CascadeClassifier(
     cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
 )
-
-faces = face_classifier.detectMultiScale(
-    gray_image, scaleFactor=1.1, minNeighbors=5, minSize=(40, 40)
-)
 emotion_dict = {0: "Angry", 1: "Fear", 2: "Happy", 3: "Neutral", 4: "Sad", 5: "Surprised"}
 
-gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-for (x, y, w, h) in faces:
-    cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 4)
-    roi_gray = gray[y:y + h, x:x + w]
-    cropped_img = np.expand_dims(np.expand_dims(cv2.resize(roi_gray, (48, 48)), -1), 0)
-    prediction = model.predict(cropped_img)
-    maxindex = int(np.argmax(prediction))
-    cv2.putText(img, emotion_dict[maxindex], (x, y), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+st.header("Emotion Recognition System")
+
+img = None
+
+option = st.selectbox(
+   "Choose a method for uploading images:",
+   ("From URL", "From Computer"),
+   index=None,
+   placeholder="Select a method...",
+)
+
+if(option=="From URL"):
+    img_URL = st.text_input('Enter a URL:')
+    
+    if img_URL:
+        req = urllib.request.Request(
+            img_URL, 
+            data=None, 
+            headers={
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/35.0.1916.47 Safari/537.36'
+        })
+
+        url_response = urllib.request.urlopen(req)
+        o_img = Image.open(url_response)
+        o_img = np.array(o_img)
+        img = copy(o_img)
+    
+if(option=="From Computer"):
+    uploaded_img = st.file_uploader('Choose an image', type=['jpg', 'png'])
+    if uploaded_img:
+        o_img = Image.open(uploaded_img)
+        o_img = np.array(o_img)
+        img = copy(o_img)
+
+    
+if img is not None:
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    faces = face_classifier.detectMultiScale(
+        gray, scaleFactor=1.1, minNeighbors=5, minSize=(40, 40)
+    )
+
+    for (x, y, w, h) in faces:
+        cv2.rectangle(o_img, (x, y), (x + w, y + h), (0, 255, 0), 4)
+        roi_gray = gray[y:y + h, x:x + w]
+        cropped_img = np.expand_dims(np.expand_dims(cv2.resize(roi_gray, (48, 48)), -1), 0)
+        prediction = model.predict(cropped_img)
+        maxindex = int(np.argmax(prediction))
+        cv2.putText(o_img, emotion_dict[maxindex], (x, y), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+
+    st.image(o_img)
+
 
 # Using cv2.imshow() method 
 # Displaying the image 
-cv2.imshow("predicted result", img) 
+# cv2.imshow("predicted result", img) 
 
-# waits for user to press any key 
-# (this is necessary to avoid Python kernel form crashing) 
-cv2.waitKey(0) 
+# # waits for user to press any key 
+# # (this is necessary to avoid Python kernel form crashing) 
+# cv2.waitKey(0) 
   
-# closing all open windows 
-cv2.destroyAllWindows() 
+# # closing all open windows 
+# cv2.destroyAllWindows() 
 
-cv2.imwrite("output.png", img) 
+# cv2.imwrite("output.png", img) 
 
