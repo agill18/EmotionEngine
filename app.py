@@ -134,12 +134,14 @@ model = build_model(input_shape)
 model.compile(loss='categorical_crossentropy',optimizer=Adam(),metrics=['accuracy'])
 reduce_lr = keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.2,
                               patience=5, min_lr=0.001)
+# start_time = time.time()
 # model_info = model.fit(
 #         train_generator,
 #         batch_size=batch_size,
 #         epochs=num_epoch,
 #         # validation_data=validation_generator,
 #         callbacks=[reduce_lr])
+# print("--- %s seconds ---" % (time.time() - start_time))
 # model.load_weights('model1.h5')
 
 # model.evaluate(validation_generator, batch_size=batch_size)
@@ -154,7 +156,7 @@ face_classifier = cv2.CascadeClassifier(
 emotion_dict = {0: "Angry", 1: "Fear", 2: "Happy", 3: "Neutral", 4: "Sad", 5: "Surprised"}
 
 
-st.header("Emotion Recognition System")
+st.header("Emotion Recognition Engine")
 
 img = None
 
@@ -190,6 +192,8 @@ if(option=="From Computer"):
 
     
 if img is not None:
+    # start_time = time.time()
+
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
     faces = face_classifier.detectMultiScale(
@@ -205,7 +209,8 @@ if img is not None:
         cv2.putText(o_img, emotion_dict[maxindex], (x, y), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
 
     st.image(o_img)
-
+    
+    # st.write("--- %s seconds ---" % (time.time() - start_time))
 
 # Using cv2.imshow() method 
 # Displaying the image 
