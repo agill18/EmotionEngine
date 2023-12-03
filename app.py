@@ -75,78 +75,43 @@ def build_model(input_shape):
 
     return model
 
-# def build_model(input_shape):
-    # # input_layer = Input(shape=input_shape)
-    # # x = Conv2D(32, kernel_size=(3, 3), activation='relu', input_shape=(48,48,1))(input_layer)
-    # # x = Conv2D(64, kernel_size=(3, 3), activation='relu')(x)
-    # # x = MaxPooling2D(pool_size=(2, 2))(x)
-    # # x = Dropout(0.25)(x)
-    
-    # # x = Conv2D(128, kernel_size=(3, 3), activation='relu')(x)
-    # # x = MaxPooling2D(pool_size=(2, 2))(x)
-    # # x = Conv2D(128, kernel_size=(3, 3), activation='relu')(x)
-    # # x = MaxPooling2D(pool_size=(2, 2))(x)
-    # # x = Dropout(0.25)(x)
-    
-    # # x = Flatten()(x)
-    # # x = Dense(1024, activation='relu')(x)
-    # # x = Dropout(0.5)(x)
-    # # x = Dense(6, activation='softmax')(x)
-    
-    # input_layer = Input(shape=input_shape)
-    # # x = Conv2D(16, (3, 3), padding='same')(input_layer)
-    # # x = Activation('relu')(x)
-    # # x = MaxPooling2D(pool_size=(2, 2))(x)
-    
-    # # x = Conv2D(32, (3, 3), padding='same')(input_layer)
-    # # x = Activation('relu')(x)
-    # # x = MaxPooling2D(pool_size=(2, 2))(x)
-    
-    # # x = Conv2D(64, (3, 3), padding='same')(x)
-    # # x = Activation('relu')(x)
-    # # x = MaxPooling2D(pool_size=(2, 2))(x)
-
-    # # x = Conv2D(128, (3, 3), padding='same')(x)
-    # # x = Activation('relu')(x)
-    # # x = MaxPooling2D(pool_size=(2, 2))(x)
-
-    # # x = GlobalAveragePooling2D()(x)
-
-    # # x = Flatten()(x)
-    # # x = Dense(512)(x)
-    # # x = Activation('relu')(x)
-    # # x = Dropout(0.5)(x)
-
-    # # # # x = Dense(1, activation='sigmoid')(x)  # Binary classification
-    # # # # x = Dense(2, activation='softmax')(x)
-    # # x = Dense(6, activation='softmax')(x)
-
-
-    # model = Model(inputs=input_layer, outputs=x)
-    # return model
 
 input_shape = (48,48, 1)
 model = build_model(input_shape)
-# # model.compile(optimizer=Adam(), loss='binary_crossentropy', metrics=['accuracy'])
 
-# # model.compile(optimizer=Adam(), loss='categorical_crossentropy', metrics=['accuracy'])
 
 model.compile(loss='categorical_crossentropy',optimizer=Adam(),metrics=['accuracy'])
 reduce_lr = keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.2,
                               patience=5, min_lr=0.001)
 # start_time = time.time()
+
 # model_info = model.fit(
 #         train_generator,
 #         batch_size=batch_size,
 #         epochs=num_epoch,
 #         # validation_data=validation_generator,
 #         callbacks=[reduce_lr])
+
 # print("--- %s seconds ---" % (time.time() - start_time))
-# model.load_weights('model1.h5')
 
-# model.evaluate(validation_generator, batch_size=batch_size)
+def process_img(img):
+    if img is not None:
+        cp_img = copy(img)
+        
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        faces = face_classifier.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(40, 40))
 
-# model.save_weights('model1.h5')
+        for (x, y, w, h) in faces:
+            cv2.rectangle(cp_img, (x, y), (x + w, y + h), (0, 255, 0), 4)
+            roi_gray = gray[y:y + h, x:x + w]
+            cropped_img = np.expand_dims(np.expand_dims(cv2.resize(roi_gray, (48, 48)), -1), 0)
+            prediction = model.predict(cropped_img)
+            maxindex = int(np.argmax(prediction))
+            cv2.putText(cp_img, emotion_dict[maxindex], (x, y), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+
+        return cp_img
+    return img        
+
 
 model.load_weights('model1.h5')
 
@@ -159,14 +124,14 @@ emotion_dict = {0: "Angry", 1: "Fear", 2: "Happy", 3: "Neutral", 4: "Sad", 5: "S
 st.header("Emotion Recognition Engine")
 
 img = None
+cam = None
 
 option = st.selectbox(
-   "Choose a method for uploading images:",
-   ("From URL", "From Computer"),
-   index=None,
-   placeholder="Select a method...",
+    "Choose a method for uploading images:",
+    ("From URL", "From Computer", "From Camera"),
+    index=None,
+    placeholder="Select a method..."
 )
-
 if(option=="From URL"):
     img_URL = st.text_input('Enter a URL:')
     
@@ -179,49 +144,36 @@ if(option=="From URL"):
         })
 
         url_response = urllib.request.urlopen(req)
-        o_img = Image.open(url_response)
-        o_img = np.array(o_img)
-        img = copy(o_img)
-    
+        img = np.array(Image.open(url_response))
+        img_to_display = process_img(img)
+        st.image(img_to_display)
+     
 if(option=="From Computer"):
     uploaded_img = st.file_uploader('Choose an image', type=['jpg', 'png'])
     if uploaded_img:
-        o_img = Image.open(uploaded_img)
-        o_img = np.array(o_img)
-        img = copy(o_img)
+        img = np.array(Image.open(uploaded_img))
+        img_to_display = process_img(img)
+        st.image(img_to_display)
 
+if(option=="From Camera"):
+    cam = cv2.VideoCapture(0)
+
+    img_counter = 0
+    o_img = None
+    frame_placeholder = st.empty()
+
+    while cam.isOpened():
+        ret, frame = cam.read()
+        if not ret:
+            print("failed to grab frame")
+            st.write("Failed to initialize frame")
+            break
+
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame_placeholder.image(process_img(frame), channels="RGB")
     
-if img is not None:
-    # start_time = time.time()
 
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    faces = face_classifier.detectMultiScale(
-        gray, scaleFactor=1.1, minNeighbors=5, minSize=(40, 40)
-    )
-
-    for (x, y, w, h) in faces:
-        cv2.rectangle(o_img, (x, y), (x + w, y + h), (0, 255, 0), 4)
-        roi_gray = gray[y:y + h, x:x + w]
-        cropped_img = np.expand_dims(np.expand_dims(cv2.resize(roi_gray, (48, 48)), -1), 0)
-        prediction = model.predict(cropped_img)
-        maxindex = int(np.argmax(prediction))
-        cv2.putText(o_img, emotion_dict[maxindex], (x, y), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
-
-    st.image(o_img)
+if cam is not None:
+    cam.release()
     
-    # st.write("--- %s seconds ---" % (time.time() - start_time))
-
-# Using cv2.imshow() method 
-# Displaying the image 
-# cv2.imshow("predicted result", img) 
-
-# # waits for user to press any key 
-# # (this is necessary to avoid Python kernel form crashing) 
-# cv2.waitKey(0) 
-  
-# # closing all open windows 
-# cv2.destroyAllWindows() 
-
-# cv2.imwrite("output.png", img) 
-
+cv2.destroyAllWindows()
